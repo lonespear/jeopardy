@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Team Buzzer</title>
+<style>
+:root{--ink:#0f1411;--panel:#18201b;--line:#34443a;--gold:#e0b84a;--cream:#efe9d6;--muted:#a3b0a6;--good:#62b57a;--bad:#d4604f;color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--ink);color:var(--cream);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));gap:14px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+h1{font-size:18px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.conn{font-size:13px;color:var(--muted)} .conn.off{color:var(--bad)}
+main{flex:1;display:flex;flex-direction:column;gap:14px;min-height:0}
+.msg{margin:auto;text-align:center;color:var(--muted);font-size:20px;line-height:1.4}
+.teams{display:grid;gap:10px}
+.teams button{background:var(--panel);border:1px solid var(--line);border-left:8px solid var(--tc);border-radius:6px;color:var(--cream);font-size:22px;font-weight:600;padding:18px 16px;text-align:left}
+.me{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);border-left:8px solid var(--tc);border-radius:6px;padding:12px 16px}
+.me b{font-size:22px}.me span{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+.me a{color:var(--muted);font-size:14px;text-decoration:underline;background:none;border:0}
+#buzz{flex:1;border:0;border-radius:18px;font-size:clamp(44px,16vw,120px);font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#07140b;background:var(--good);box-shadow:0 8px 0 rgba(0,0,0,.35)}
+#buzz:active:not([disabled]){transform:translateY(6px);box-shadow:0 2px 0 rgba(0,0,0,.35)}
+#buzz[disabled]{box-shadow:none}
+#buzz.wait{background:#243028;color:var(--muted);font-size:clamp(26px,8vw,56px)}
+#buzz.in{background:var(--gold);color:#17130a;font-size:clamp(34px,11vw,90px)}
+#buzz.first{background:var(--good)}
+#buzz.out{background:#3a1d18;color:#f1b7ae;font-size:clamp(30px,9vw,70px)}
+</style>
+</head>
+<body>
+<header><h1>Team Buzzer</h1><div class="conn" id="conn">Connecting…</div></header>
+<main id="main"></main>
+<script>
+const COLORS=['#e0b84a','#62b5d4','#d4604f','#62b57a','#b58ad6','#e08a4a','#d46aa0','#9bb84a'];
+const KEY='ma206-buzz-team';
+let ws=null, S={teams:[],open:false,locked:[],queue:[]}, my=null, up=false, tries=0;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ord=n=>['1st','2nd','3rd','4th','5th','6th','7th','8th'][n]||(n+1)+'th';
+function saved(){ try{ return JSON.parse(localStorage.getItem(KEY)); }catch(e){ return null; } }
+function keep(){ try{ localStorage.setItem(KEY, JSON.stringify(my===null?null:{i:my,name:S.teams[my]&&S.teams[my].name})); }catch(e){} }
+function connect(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  ws=new WebSocket(proto+'://'+location.host+'/ws');
+  ws.onopen=()=>{ up=true; tries=0; $('#conn').textContent='Connected'; $('#conn').className='conn'; if(my!==null) ws.send(JSON.stringify({t:'join',team:my})); };
+  ws.onmessage=e=>{ let m; try{m=JSON.parse(e.data);}catch(x){return;} if(m.t==='state'){ S=m; reconcile(); render(); } };
+  ws.onclose=()=>{ up=false; $('#conn').textContent='Reconnecting…'; $('#conn').className='conn off'; render(); setTimeout(connect,Math.min(4000,500*(++tries))); };
+}
+function reconcile(){
+  if(my!==null && (my>=S.teams.length)) { my=null; keep(); }
+  if(my===null){ const s=saved(); if(s && S.teams[s.i] && S.teams[s.i].name===s.name){ my=s.i; if(ws&&ws.readyState===1) ws.send(JSON.stringify({t:'join',team:my})); } }
+}
+function pick(i){ my=i; keep(); if(ws&&ws.readyState===1) ws.send(JSON.stringify({t:'join',team:i})); render(); }
+function change(){ my=null; try{localStorage.removeItem(KEY);}catch(e){} render(); }
+function buzz(){
+  if(!up||my===null||!S.open||S.locked.includes(my)||S.queue.includes(my)) return;
+  ws.send(JSON.stringify({t:'buzz'}));
+  try{ navigator.vibrate&&navigator.vibrate(60); }catch(e){}
+}
+function render(){
+  const main=$('#main');
+  if(!S.teams.length){ main.innerHTML='<div class="msg">Waiting for the host to start the game…</div>'; return; }
+  if(my===null){
+    main.innerHTML='<div class="msg" style="margin:0;text-align:left;font-size:18px">Tap your team</div><div class="teams">'+
+      S.teams.map((t,i)=>'<button style="--tc:'+COLORS[i%8]+'" data-i="'+i+'">'+esc(t.name)+'</button>').join('')+'</div>';
+    return;
+  }
+  const t=S.teams[my], pos=S.queue.indexOf(my), locked=S.locked.includes(my);
+  let cls='wait', label='Wait for the clue', dis=true;
+  if(locked){ cls='out'; label='Locked out'; }
+  else if(pos>=0){ cls=pos===0?'in first':'in'; label=pos===0?'You are first':'Buzzed: '+ord(pos); }
+  else if(S.open){ cls=''; label='Buzz'; dis=!up; }
+  main.innerHTML='<div class="me" style="--tc:'+COLORS[my%8]+'"><div><b>'+esc(t.name)+'</b><br><a id="chg">Change team</a></div><span>'+(t.score<0?'−':'')+'$'+Math.abs(t.score).toLocaleString('en-US')+'</span></div>'+
+    '<button id="buzz" class="'+cls+'" '+(dis?'disabled':'')+'>'+label+'</button>';
+  const b=$('#buzz'); b.addEventListener('pointerdown',e=>{e.preventDefault();buzz();});
+  $('#chg').addEventListener('click',change);
+}
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-i]'); if(b) pick(+b.dataset.i); });
+render(); connect();
+</script>
+</body>
+</html>
