@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MA206 WPR2 Review Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a unit-briefing board. Dark olive-black field, brass gold for values, placard-style category heads,
+   scoreboard strip along the bottom. Built for a projector: big type, high contrast. */
+:root{
+  --ink:#0f1411;
+  --panel:#18201b;
+  --panel-2:#222d26;
+  --line:#34443a;
+  --gold:#e0b84a;
+  --cream:#efe9d6;
+  --muted:#a3b0a6;
+  --good:#62b57a;
+  --bad:#d4604f;
+  --display:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--ink);color:var(--cream);font-family:var(--body);overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+#app{height:100%;display:flex;flex-direction:column;padding:1.2vh 1.2vw;gap:1.2vh}
+
+/* buttons */
+.btn{background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:.6em 1.1em;font-weight:600;font-size:clamp(13px,1.15vw,20px);line-height:1.1}
+.btn:hover{border-color:var(--gold)}
+.btn.pri{background:var(--gold);border-color:var(--gold);color:#17130a}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.warn{border-color:var(--bad);color:#f1b7ae}
+.btn[disabled]{opacity:.35;cursor:default}
+.btn.big{font-size:clamp(16px,1.6vw,28px);padding:.7em 1.5em}
+
+/* header */
+.top{display:flex;align-items:center;justify-content:space-between;gap:1vw;min-height:5.5vh}
+.brand{display:flex;align-items:baseline;gap:1vw}
+.brand b{font-family:var(--display);font-weight:900;font-size:clamp(20px,2.6vw,46px);letter-spacing:.04em;text-transform:uppercase}
+.brand span{font-family:var(--display);font-weight:700;color:var(--gold);font-size:clamp(16px,1.9vw,32px);letter-spacing:.12em;text-transform:uppercase}
+.ctl{display:flex;gap:.6vw;flex-wrap:wrap;justify-content:flex-end}
+
+/* board */
+.board{flex:1;min-height:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:minmax(0,.85fr) repeat(4,minmax(0,1fr));gap:.7vh .5vw}
+.cat{display:flex;align-items:center;justify-content:center;text-align:center;background:var(--panel-2);border-bottom:4px solid var(--gold);border-left:1px solid var(--line);padding:.6vh .6vw;font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.04em;line-height:1.02;font-size:clamp(14px,min(2vw,3.6vh),44px);text-wrap:balance}
+.cell{display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--line);border-radius:3px;color:var(--gold);font-family:var(--display);font-weight:900;font-size:clamp(26px,min(5.2vw,9vh),100px);letter-spacing:.02em;font-variant-numeric:tabular-nums;transition:background .12s,transform .12s}
+button.cell:hover{background:var(--panel-2);transform:translateY(-2px);border-color:var(--gold)}
+.cell.used{background:transparent;border:1px dashed #263229;cursor:default}
+
+/* scoreboard */
+.scores{display:flex;gap:.5vw}
+.sc{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:.2vh;background:var(--panel);border:1px solid var(--line);border-left:7px solid var(--tc);border-radius:3px;padding:.8vh .8vw;text-align:left}
+.sc.picks{border-color:var(--gold);border-left-color:var(--tc);box-shadow:0 0 0 2px var(--gold) inset}
+.sc-n{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:clamp(12px,1.25vw,22px)}
+.sc-v{font-family:var(--display);font-weight:900;font-size:clamp(24px,3.1vw,56px);line-height:1;font-variant-numeric:tabular-nums}
+.sc-v.neg{color:var(--bad)}
+.sc-tag{position:absolute;top:.6vh;right:.5vw;font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.12em;font-size:clamp(10px,.95vw,16px);color:var(--gold)}
+
+/* clue overlay */
+.overlay{position:fixed;inset:0;z-index:20;background:var(--ink);display:none;flex-direction:column;padding:2vh 2.2vw;gap:1.6vh}
+.overlay.on{display:flex}
+.ov-top{display:flex;justify-content:space-between;align-items:center;gap:2vw}
+.ov-cat{display:flex;align-items:baseline;gap:1.4vw;font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:clamp(18px,2.4vw,42px)}
+.ov-val{color:var(--gold);font-weight:900;font-size:1.25em}
+.ov-right{display:flex;align-items:center;gap:1.2vw}
+.pill{border:1px solid var(--gold);color:var(--gold);border-radius:99px;padding:.35em 1em;font-weight:600;font-size:clamp(12px,1.15vw,20px);white-space:nowrap}
+.timer{background:transparent;border:1px solid var(--line);border-radius:4px;padding:.2em .8em;font-family:var(--display);font-weight:900;font-size:clamp(24px,3vw,54px);font-variant-numeric:tabular-nums;min-width:3.2em;text-align:center}
+.tbar{height:.9vh;background:var(--panel-2);border-radius:99px;overflow:hidden}
+#tfill{height:100%;width:100%;background:var(--gold);transition:width .1s linear}
+#tfill.low{background:var(--bad)}
+.ov-body{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;text-align:center;padding:1vh 3vw}
+.clue{font-size:clamp(22px,min(3.4vw,5.6vh),64px);line-height:1.3;font-weight:500;max-width:27em;text-wrap:pretty}
+.answer{display:none;border:2px solid var(--gold);background:var(--panel);border-radius:4px;padding:1.4vh 2vw;width:100%;max-width:1400px;margin:0 auto;text-align:center}
+.answer.show{display:block}
+.ans-l{font-family:var(--display);font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-size:clamp(12px,1.2vw,20px)}
+.ans-m{font-family:var(--display);font-weight:800;font-size:clamp(26px,min(3.6vw,6vh),64px);line-height:1.1;margin:.3vh 0}
+.ans-m.code{font-family:var(--mono);font-weight:600;font-size:clamp(22px,min(3.2vw,5.4vh),58px);color:var(--cream)}
+.ans-w{color:var(--muted);font-size:clamp(14px,1.6vw,28px);line-height:1.3}
+.judge{display:flex;flex-wrap:wrap;gap:.7vw;justify-content:center}
+.jt{display:flex;align-items:center;gap:.8vw;background:var(--panel);border:1px solid var(--line);border-left:7px solid var(--tc);border-radius:3px;padding:.7vh .8vw}
+.jt-n{font-weight:600;font-size:clamp(13px,1.3vw,22px);max-width:11em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jt-s{font-family:var(--display);font-weight:900;font-size:clamp(18px,2vw,34px);font-variant-numeric:tabular-nums;min-width:2.6em;text-align:right}
+.jt-s.neg{color:var(--bad)}
+.jt.up{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
+.jt-n{background:none;border:0;color:inherit;text-align:left;cursor:pointer}
+button.jt-n:hover{color:var(--gold)}
+.kn{font-family:var(--mono);font-weight:600;font-size:clamp(11px,1vw,16px);color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 .4em}
+.ord{font-family:var(--display);font-weight:900;letter-spacing:.06em;text-transform:uppercase;background:var(--gold);color:#17130a;border-radius:3px;padding:.05em .5em;font-size:clamp(14px,1.5vw,26px)}
+.jt:not(.up) .ord{background:var(--panel-2);color:var(--cream);border:1px solid var(--line)}
+.upbanner{text-align:center;font-size:clamp(16px,2vw,34px);color:var(--cream)}
+.upbanner b{color:var(--gold);font-family:var(--display);font-weight:900;font-size:1.25em;letter-spacing:.04em;text-transform:uppercase}
+.upbanner.dim{color:var(--muted);font-size:clamp(13px,1.3vw,22px)}
+.j{border:1px solid var(--line);background:var(--panel-2);border-radius:4px;font-weight:700;font-size:clamp(15px,1.5vw,26px);min-width:2.4em;padding:.35em .7em}
+.j.ok:hover:not([disabled]){background:var(--good);color:#08150c;border-color:var(--good)}
+.j.no:hover:not([disabled]){background:var(--bad);color:#1c0905;border-color:var(--bad)}
+.j.on-ok{background:var(--good);color:#08150c;border-color:var(--good)}
+.j.on-no{background:var(--bad);color:#1c0905;border-color:var(--bad)}
+.j[disabled]{opacity:.3;cursor:default}
+.ov-act{display:flex;gap:1vw;justify-content:center;align-items:center;flex-wrap:wrap}
+
+/* daily double */
+.dd{margin:auto;display:flex;flex-direction:column;align-items:center;gap:2vh;text-align:center;max-width:1100px}
+.dd-badge{font-family:var(--display);font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-size:clamp(40px,8vw,150px);line-height:.95}
+.dd-cat{font-family:var(--display);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:clamp(16px,2vw,34px);color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:.6vw;justify-content:center}
+.chip{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--tc);border-radius:3px;padding:.5em .9em;font-weight:600;font-size:clamp(13px,1.3vw,22px)}
+.chip.sel{border-color:var(--gold);border-left-color:var(--tc);box-shadow:0 0 0 2px var(--gold) inset}
+.dd-l{font-size:clamp(14px,1.5vw,26px);color:var(--muted)}
+.num{background:var(--panel);border:2px solid var(--line);border-radius:4px;color:var(--gold);font-family:var(--display);font-weight:900;font-size:clamp(30px,5vw,90px);width:5.2em;text-align:center;padding:.1em .2em;font-variant-numeric:tabular-nums}
+.err{color:var(--bad);min-height:1.4em;font-size:clamp(13px,1.3vw,22px)}
+
+/* setup */
+.setup{height:100%;overflow:auto;display:flex;justify-content:center;padding:4vh 4vw}
+.setup-in{width:100%;max-width:1020px;display:flex;flex-direction:column;gap:3vh}
+.s-kick{font-family:var(--display);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-size:clamp(14px,1.5vw,24px)}
+.s-title{font-family:var(--display);font-weight:900;text-transform:uppercase;line-height:.92;letter-spacing:.015em;font-size:clamp(44px,8vw,128px)}
+.s-sub{color:var(--muted);font-size:clamp(15px,1.5vw,24px);max-width:36em;line-height:1.4}
+.fs{border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:2vh 1.6vw;display:flex;flex-direction:column;gap:1.4vh}
+.fs h2{font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);font-size:clamp(14px,1.4vw,22px)}
+.row{display:flex;gap:1vw;align-items:center;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:.8vw}
+.step output{font-family:var(--display);font-weight:900;font-size:clamp(28px,3vw,48px);min-width:1.5em;text-align:center}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1vh .8vw}
+.names input,.sel-in{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding:.6em .8em;width:100%;font-size:clamp(14px,1.2vw,20px)}
+.names input{border-left:6px solid var(--tc)}
+.opt{display:flex;gap:.8em;align-items:flex-start;font-size:clamp(14px,1.25vw,21px);line-height:1.35}
+.opt input{margin-top:.35em;accent-color:var(--gold);width:1.1em;height:1.1em}
+.opt small{display:block;color:var(--muted);font-size:.88em}
+.resume{border:1px solid var(--gold);background:var(--panel);border-radius:4px;padding:1.6vh 1.4vw;display:flex;gap:1.2vw;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+/* final */
+.final{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;gap:2.2vh;text-align:center;padding:1vh 2vw}
+.f-k{font-family:var(--display);font-weight:800;letter-spacing:.25em;text-transform:uppercase;color:var(--gold);font-size:clamp(14px,1.6vw,26px)}
+.f-cat{font-family:var(--display);font-weight:900;text-transform:uppercase;letter-spacing:.04em;font-size:clamp(40px,7vw,120px);line-height:.95}
+.wagers{display:flex;flex-wrap:wrap;gap:1vw;justify-content:center}
+.wg{background:var(--panel);border:1px solid var(--line);border-left:7px solid var(--tc);border-radius:3px;padding:1.2vh 1vw;display:flex;flex-direction:column;gap:.6vh;align-items:center;min-width:12em}
+.wg .num{font-size:clamp(24px,3.4vw,60px);width:4.4em}
+.wg small{color:var(--muted);font-size:clamp(12px,1.1vw,18px)}
+.stand{display:flex;flex-direction:column;gap:1vh;width:100%;max-width:900px}
+.rk{display:flex;align-items:center;gap:1.4vw;background:var(--panel);border:1px solid var(--line);border-left:8px solid var(--tc);border-radius:3px;padding:1.2vh 1.4vw;text-align:left}
+.rk.first{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
+.rk-p{font-family:var(--display);font-weight:900;font-size:clamp(28px,4vw,72px);color:var(--gold);min-width:1.4em}
+.rk-n{flex:1;font-weight:600;font-size:clamp(18px,2.2vw,38px)}
+.rk-s{font-family:var(--display);font-weight:900;font-size:clamp(28px,4vw,72px);font-variant-numeric:tabular-nums}
+.rk-s.neg{color:var(--bad)}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:30;background:rgba(5,8,6,.8);display:none;align-items:center;justify-content:center;padding:3vh 3vw}
+.modal.on{display:flex}
+.card{background:var(--panel);border:1px solid var(--gold);border-radius:4px;padding:2.4vh 2vw;width:100%;max-width:640px;max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:1.6vh}
+.card h2{font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-size:clamp(18px,2vw,32px)}
+.er{display:flex;align-items:center;gap:1vw}
+.er label{flex:1;font-weight:600;border-left:6px solid var(--tc);padding-left:.7em;font-size:clamp(14px,1.3vw,22px)}
+.er input{width:8em;background:var(--ink);border:1px solid var(--line);border-radius:4px;padding:.5em .7em;text-align:right;font-variant-numeric:tabular-nums;font-size:clamp(14px,1.3vw,22px)}
+
+@media (max-width:760px){
+  .board{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:none;overflow:auto}
+  .scores{flex-wrap:wrap}.sc{flex:1 1 40%}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-label="Clue"></div>
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-label="Edit scores"></div>
+
+<script>
+/* ============================================================
+   CLUE DATA. 48 clues from MA206 WPR2 Recognition Drills 1 and 2.
+   Answers and explanations follow the instructor keys.
+   Final clue is an added question, written in the same style.
+   ============================================================ */
+const TYPE = {
+  TEST:'Name the test',
+  TF:'True or False',
+  CODE:'Write the R-Lite command',
+  HYP:'Write only Hₐ',
+  CI:'Write YES or NO'
+};
+const c = (t,q,a,w) => ({t,q,a,w});
+
+const ROUNDS = [
+ { name:'Round 1', mult:1, cats:[
+  { name:'Name That Test I', clues:[
+    c('TEST','Each of 22 cadets records pulse rate before and after climbing stairs. The researcher compares the mean change.','Paired t test','Two measurements on each cadet.'),
+    c('TEST','Two independent random samples of cadets use different study methods. Compare their mean quiz scores; both populations are approximately normal.','Two-sample t test','Two independent groups, quantitative outcomes.'),
+    c('TEST','A random sample of 18 batteries has a mean lifetime of 41 hours and sample standard deviation of 6 hours. Lifetimes are approximately normally distributed. Test whether the true mean differs from 44 hours.','One-sample t test','One mean; population SD unknown; small sample with approximate normality.'),
+    c('TEST','A random sample of 60 containers has a sample mean fill volume and sample standard deviation. Test whether the true mean is less than the stated volume.','One-sample z test','SRC n ≥ 40 row. The SRC specifies the z procedure for one mean with n ≥ 40.')
+  ]},
+  { name:'Proportions', clues:[
+    c('TEST','In a random sample of 150 trainees, 102 complete a certification on the first attempt. Test whether the true proportion differs from 0.65.','One-proportion z test','One population proportion.'),
+    c('TEST','In a random sample of 120 deliveries, 87 arrive on schedule. Test whether the true proportion arriving on schedule differs from 0.75.','One-proportion z test','One population proportion is being tested.'),
+    c('TF','For a one-proportion z test, the large-count conditions are checked using the null proportion p₀.','True','Check np₀ and n(1 − p₀).'),
+    c('TF','For a one-proportion z test with H₀: p = 0.65 and n = 150, the large-count check uses the observed sample proportion.','False','For a one-proportion test, check np₀ and n(1 − p₀).')
+  ]},
+  { name:'P-values: One-Sided', clues:[
+    c('CODE','For a left-sided z test, the observed statistic is z = -1.3. Write R-Lite code for the P-value.','pnorm(-1.3)','Lower-tail area.'),
+    c('CODE','For a right-sided z test, the observed statistic is z = 1.7. Write R-Lite code for the P-value.','1-pnorm(1.7)','Greater-than alternative uses upper tail.'),
+    c('CODE','For a left-sided t test, the observed statistic is t = -1.9 with 17 degrees of freedom. Write R-Lite code for the P-value.','pt(-1.9,17)','A less-than alternative uses the lower tail.'),
+    c('CODE','For a right-sided t test, the observed statistic is t = 1.6 with 14 degrees of freedom. Write the R-Lite command for the P-value.','1-pt(1.6,14)','The alternative is greater than, so use the upper tail.')
+  ]},
+  { name:'Critical Values I', clues:[
+    c('CODE','Find the positive critical z value for a 95% confidence interval. Write the R-Lite command.','qnorm(0.975)','Two tails leave 0.025 above the positive cutoff.'),
+    c('TF','For a 95% confidence interval, qnorm(0.95) gives the positive critical z value.','False','For a two-sided 95% interval, use qnorm(0.975).'),
+    c('CODE','Find the positive critical z value for a 98% confidence interval. Write R-Lite code.','qnorm(0.99)','α = 0.02, so upper cumulative area is 0.99.'),
+    c('CODE','Find the positive critical t value for a 98% confidence interval with 24 degrees of freedom. Write the R-Lite command.','qt(0.99,24)','One percent is in the upper tail.')
+  ]},
+  { name:'CLT & Normality', clues:[
+    c('TF','For a random sample of size 50 from a skewed population with finite variance, the CLT supports an approximately normal sampling distribution for the sample mean.','True','The SRC uses n ≥ 40 for the CLT approximation.'),
+    c('TF','For a random sample of size 48 from a strongly skewed population with finite variance, the CLT supports an approximately normal sampling distribution for the sample mean.','True','The SRC uses n ≥ 40 for the CLT approximation.'),
+    c('TF','The CLT says that the population distribution becomes approximately normal when n is at least 40.','False','The CLT concerns the sampling distribution of the sample mean.'),
+    c('TF','The CLT says that individual observations become normally distributed as the sample size increases.','False','The approximation concerns the sampling distribution of the mean.')
+  ]},
+  { name:'Hypotheses', clues:[
+    c('HYP','A supervisor believes the true mean wait time exceeds 12 minutes. Write only Hₐ.','Hₐ: μ > 12','Exceeds indicates greater than.'),
+    c('HYP','A researcher wants to know whether the true mean time to assemble a radio is less than 18 minutes. Write only Hₐ.','Hₐ: μ < 18','Less than indicates a left-sided alternative.'),
+    c('HYP','A program director wants to know whether the true mean attendance differs from 32 students. Write only Hₐ.','Hₐ: μ ≠ 32','Differs indicates not equal.'),
+    c('HYP','A quality officer believes the true proportion of items passing inspection is greater than 0.90. Write only Hₐ.','Hₐ: p > 0.90','Greater than indicates a right-sided alternative.')
+  ]}
+ ]},
+ { name:'Round 2', mult:2, cats:[
+  { name:'Name That Test II', clues:[
+    c('TEST','Each of 19 volunteers has grip strength measured with the right hand and the left hand. Compare the true mean difference in grip strength.','Paired t test','Two related measurements per volunteer.'),
+    c('TEST','A researcher records reaction time for each participant using a mouse and again using a trackpad. Compare the mean difference.','Paired t test','Matched observations on the same person.'),
+    c('TEST','Two independent random samples of employees use different scheduling systems. Compare the true mean number of hours worked. Both populations are approximately normally distributed.','Two-sample t test','Independent groups, quantitative outcome.'),
+    c('TEST','A random sample of 23 helmets has a sample mean mass and sample standard deviation. Helmet masses are approximately normally distributed. Test whether the true mean mass differs from the manufacturer’s claim.','One-sample t test','One mean; σ unknown; n < 40; population approximately normal.')
+  ]},
+  { name:'P-values: Two-Sided', clues:[
+    c('CODE','For a two-sided z test, the observed statistic is z = 1.85. Write the R-Lite command for the P-value.','2*pnorm(-abs(1.85))','Use twice the smaller tail area.'),
+    c('CODE','For a two-sided z test, the observed statistic is z = -2.1. Write R-Lite code for the P-value.','2*pnorm(-abs(-2.1))','Two-sided: double the smaller tail.'),
+    c('CODE','For a two-sided t test, the observed statistic is t = 2.4 with 21 degrees of freedom. Write R-Lite code for the P-value.','2*pt(-abs(2.4),21)','Double the smaller tail.'),
+    c('CODE','For a two-sided t test, the observed statistic is t = -2.05 with 18 degrees of freedom. Write the R-Lite command for the P-value.','2*pt(-abs(-2.05),18)','Double the smaller tail area.')
+  ]},
+  { name:'Critical Values II', clues:[
+    c('CODE','Find the positive critical z value for a 98% confidence interval. Write the R-Lite command.','qnorm(0.99)','The upper tail contains 0.01.'),
+    c('CODE','Find the positive critical t value for a 90% confidence interval with 19 degrees of freedom. Write R-Lite code.','qt(0.95,19)','For 90%, α/2 = 0.05.'),
+    c('CODE','Find the positive critical t value for a 95% confidence interval with 11 degrees of freedom. Write R-Lite code.','qt(0.975,11)','Upper cumulative area = 1 − 0.05/2.'),
+    c('CODE','Find the positive critical t value for a 95% confidence interval with 12 degrees of freedom. Write the R-Lite command.','qt(0.975,12)','The upper-tail probability is 0.025.')
+  ]},
+  { name:'Intervals & Tests', clues:[
+    c('TF','A 95% confidence interval that does not contain the null value supports rejecting the corresponding two-sided test at α = 0.05.','True','CI/test equivalence for matching two-sided procedures.'),
+    c('CI','A 95% confidence interval for a true mean difference is (-1.4, 3.2). At α = 0.05, does the corresponding two-sided test reject H₀: μD = 0? Write YES or NO.','NO','The interval contains 0.'),
+    c('TF','If a 95% confidence interval for a population mean includes the hypothesized mean, the corresponding two-sided test at α = 0.05 rejects H₀.','False','Including the null value corresponds to failing to reject.'),
+    c('CI','A 98% confidence interval for a population mean is (21.2, 27.6). At α = 0.02, does the corresponding two-sided test reject H₀: μ = 20? Write YES or NO.','YES','The interval excludes 20.')
+  ]},
+  { name:'Margin of Error & Confidence', clues:[
+    c('TF','If the sample size increases and everything else stays the same, the margin of error for a confidence interval becomes smaller.','True','Standard error decreases as n increases.'),
+    c('TF','Increasing the sample size, with everything else held fixed, decreases the standard error of the sample mean.','True','SE = σ/√n, or estimated with s.'),
+    c('TF','A 98% confidence interval constructed from the same sample and method is wider than a 95% confidence interval.','True','Higher confidence requires a larger critical value.'),
+    c('TF','For a 98% confidence interval, 1% of the distribution lies beyond each critical value.','True','The remaining 2% is divided equally between the two tails.')
+  ]},
+  { name:'Rapid Fire', clues:[
+    c('TF','For a normal population, the sample mean is normally distributed even when n is less than 40.','True','Normal-population result is exact for any n.'),
+    c('TF','A P-value of 0.08 leads to rejecting H₀ at the α = 0.05 significance level.','False','0.08 > 0.05.'),
+    c('TF','For a one-proportion z test with H₀: p = 0.30 and n = 80, both np₀ and n(1 − p₀) are at least 10.','True','24 and 56 meet the condition.'),
+    c('CODE','For a left-sided z test, the observed statistic is z = -1.4. Write the R-Lite command for the P-value.','pnorm(-1.4)','Use the left-tail area.')
+  ]}
+ ]}
+];
+
+/* Added question, not from the drills. */
+const FINAL = {
+  cat:'Test + Code',
+  q:'A random sample of 25 values comes from an approximately normal population with unknown σ. Test whether the true mean differs from 50. The observed statistic is t = 2.3. Name the test and write the R-Lite command for the P-value.',
+  a:'One-sample t test;  2*pt(-abs(2.3),24)',
+  w:'One mean, σ unknown, n < 40, approximately normal. df = n − 1 = 24. Two-sided, so double the smaller tail.'
+};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const KEY = 'ma206-wpr2-review-board-v1';
+const COLORS = ['#e0b84a','#62b5d4','#d4604f','#62b57a','#b58ad6','#e08a4a','#d46aa0','#9bb84a'];
+let S = null;                 // saved game state (plain JSON)
+let cur = null;               // clue currently on screen (not saved)
+let setup = {n:6, names:[], timer:45, dd:true, mode:'buzz'};
+let pend = null, pendT = null;
+const tm = {total:0, end:0, rem:0, running:false, iv:null};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fmt = n => (n < 0 ? '−' : '') + '$' + Math.abs(n).toLocaleString('en-US');
+const tc = i => COLORS[i % COLORS.length];
+
+function loadSaved(){
+  try{ const j = localStorage.getItem(KEY); if(!j) return null; const o = JSON.parse(j); return o && o.phase ? o : null; }catch(e){ return null; }
+}
+function save(){
+  try{ if(S) localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+}
+function clearSaved(){ try{ localStorage.removeItem(KEY); }catch(e){} }
+
+/* ============================================================
+   TIMER
+   ============================================================ */
+function startTimer(secs){
+  stopTimer();
+  tm.total = secs * 1000; tm.rem = tm.total;
+  if(!secs) return;
+  tm.end = Date.now() + tm.rem; tm.running = true;
+  tm.iv = setInterval(tick, 100);
+}
+function stopTimer(){
+  if(tm.running) tm.rem = Math.max(0, tm.end - Date.now());
+  clearInterval(tm.iv); tm.iv = null; tm.running = false;
+}
+function toggleTimer(){
+  if(!tm.total) return;
+  if(tm.running){ stopTimer(); }
+  else if(tm.rem > 0){ tm.end = Date.now() + tm.rem; tm.running = true; tm.iv = setInterval(tick, 100); }
+  paint();
+}
+function tick(){
+  if(Date.now() >= tm.end){ stopTimer(); tm.rem = 0; beep(); }
+  else tm.rem = tm.end - Date.now();
+  paint();
+}
+function paint(){
+  const f = $('#tfill'), t = $('#ttext');
+  if(!f || !t) return;
+  const rem = tm.running ? Math.max(0, tm.end - Date.now()) : tm.rem;
+  f.style.width = (tm.total ? rem / tm.total * 100 : 0) + '%';
+  f.classList.toggle('low', rem <= 5000);
+  const s = Math.ceil(rem / 1000);
+  t.textContent = rem <= 0 ? 'TIME' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function beep(){
+  try{
+    const A = window.AudioContext || window.webkitAudioContext; const ctx = new A();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square'; o.frequency.value = 520; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(.12, ctx.currentTime); g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .7);
+    o.start(); o.stop(ctx.currentTime + .7);
+  }catch(e){}
+}
+function timerHtml(){
+  return tm.total ? `<button class="timer" data-act="timer" aria-label="Pause or resume timer"><span id="ttext"></span></button>` : '';
+}
+function barHtml(){ return tm.total ? `<div class="tbar"><div id="tfill"></div></div>` : ''; }
+
+/* ============================================================
+   SETUP
+   ============================================================ */
+function collectSetup(){
+  const names = [];
+  for(let i = 0; i < setup.n; i++){ const el = $('#tn' + i); names.push(el ? el.value.trim() : (setup.names[i] || '')); }
+  setup.names = names;
+  const t = $('#optTimer'); if(t) setup.timer = +t.value;
+  const d = $('#optDD'); if(d) setup.dd = d.checked;
+  const m = document.querySelector('input[name=mode]:checked'); if(m) setup.mode = m.value;
+}
+function renderSetup(){
+  const saved = loadSaved();
+  setTimeout(() => { const e = $('#setupnet'); if(e) e.textContent = netOK ? 'Team buzzers are live. Teams open ' + location.host + '/buzz on their phones.' : ''; }, 0);
+  const resume = saved && saved.phase !== 'done' ? `
+    <div class="resume">
+      <div><b>Saved game found.</b> ${saved.teams.length} teams, ${saved.phase === 'final' ? 'Final round' : 'Round ' + (saved.round + 1)}.</div>
+      <button class="btn pri" data-act="resume">Resume game</button>
+    </div>` : '';
+  let names = '';
+  for(let i = 0; i < setup.n; i++){
+    names += `<input id="tn${i}" style="--tc:${tc(i)}" type="text" maxlength="24" placeholder="Team ${i + 1}" value="${esc(setup.names[i] || '')}" aria-label="Name of team ${i + 1}">`;
+  }
+  const opts = [[0,'Off'],[20,'20 seconds'],[30,'30 seconds'],[45,'45 seconds'],[60,'60 seconds'],[90,'90 seconds']]
+    .map(([v,l]) => `<option value="${v}" ${setup.timer === v ? 'selected' : ''}>${l}</option>`).join('');
+  $('#app').innerHTML = `
+  <div class="setup"><div class="setup-in">
+    <div>
+      <div class="s-kick">MA206 · Probability and Statistics</div>
+      <h1 class="s-title">WPR2 Review<br>Board</h1>
+    </div>
+    <p class="s-sub" id="setupnet"></p>
+    <p class="s-sub">Two rounds and a final. 48 clues from Recognition Drills 1 and 2: pick the test, write the R-Lite command, call true or false.</p>
+    ${resume}
+    <div class="fs">
+      <h2>Teams</h2>
+      <div class="row">
+        <div class="step">
+          <button class="btn" data-act="tminus" aria-label="Fewer teams">−</button>
+          <output id="tcount" aria-live="polite">${setup.n}</output>
+          <button class="btn" data-act="tplus" aria-label="More teams">+</button>
+        </div>
+        <span class="s-sub" style="font-size:clamp(13px,1.2vw,20px)">Teams of 2 or 3 cadets. Names are optional.</span>
+      </div>
+      <div class="names">${names}</div>
+    </div>
+    <div class="fs">
+      <h2>Rules</h2>
+      <label class="opt"><input type="radio" name="mode" value="buzz" ${setup.mode === 'buzz' ? 'checked' : ''}><span>Buzz in<small>First team to call out an answer is judged. Wrong answer loses the clue value and the next team can steal.</small></span></label>
+      <label class="opt"><input type="radio" name="mode" value="written" ${setup.mode === 'written' ? 'checked' : ''}><span>Everyone writes<small>All teams write an answer, you reveal it, then tap every team that got it right. No penalties.</small></span></label>
+      <div class="row">
+        <label for="optTimer" class="opt" style="align-items:center">Clue timer</label>
+        <select id="optTimer" class="sel-in" style="width:auto">${opts}</select>
+      </div>
+      <label class="opt"><input id="optDD" type="checkbox" ${setup.dd ? 'checked' : ''}><span>Daily Doubles<small>One hidden in Round 1, two in Round 2. The picking team wagers.</small></span></label>
+    </div>
+    <div><button class="btn pri big" data-act="start">Start game</button></div>
+  </div></div>`;
+}
+function genDD(r){
+  if(!S.ddOn) return [];
+  const cols = [0,1,2,3,4,5].sort(() => Math.random() - .5);
+  const n = r === 0 ? 1 : 2, out = [];
+  for(let k = 0; k < n; k++){
+    const rows = r === 0 ? [2,3] : [1,2,3];
+    out.push(cols[k] + ',' + rows[Math.floor(Math.random() * rows.length)]);
+  }
+  return out;
+}
+function startGame(){
+  collectSetup();
+  const used = () => Array.from({length:6}, () => [false,false,false,false]);
+  S = {
+    phase:'board', round:0, picker:0, mode:setup.mode, timerSecs:setup.timer, ddOn:setup.dd,
+    teams: setup.names.slice(0, setup.n).map((n,i) => ({name:n || 'Team ' + (i + 1), score:0})),
+    used:[used(), used()], dd:[[],[]], final:null
+  };
+  S.dd = [genDD(0), genDD(1)];
+  cur = null; tm.total = 0;
+  render();
+}
+
+/* ============================================================
+   BOARD
+   ============================================================ */
+function scoreboard(interactive){
+  return `<footer class="scores">` + S.teams.map((t,i) => {
+    const p = interactive && i === S.picker;
+    return `<button class="sc ${p ? 'picks' : ''}" style="--tc:${tc(i)}" ${interactive ? `data-act="setpicker" data-t="${i}"` : 'tabindex="-1"'}>
+      <span class="sc-n">${esc(t.name)}</span><span class="sc-v ${t.score < 0 ? 'neg' : ''}">${fmt(t.score)}</span>${p ? '<span class="sc-tag">Picks</span>' : ''}</button>`;
+  }).join('') + `</footer>`;
+}
+function renderBoard(){
+  const R = ROUNDS[S.round];
+  const left = S.used[S.round].flat().filter(x => !x).length;
+  const nextLabel = S.round === 0 ? 'Round 2' : 'Final';
+  let cells = R.cats.map(k => `<div class="cat">${esc(k.name)}</div>`).join('');
+  for(let i = 0; i < 4; i++){
+    for(let ci = 0; ci < 6; ci++){
+      const v = (i + 1) * 200 * R.mult;
+      cells += S.used[S.round][ci][i]
+        ? `<div class="cell used" aria-hidden="true"></div>`
+        : `<button class="cell" data-act="pick" data-c="${ci}" data-i="${i}" aria-label="${esc(R.cats[ci].name)} for ${v}">$${v}</button>`;
+    }
+  }
+  const nextBtn = left === 0
+    ? `<button class="btn pri" data-act="next">Go to ${nextLabel} ▸</button>`
+    : `<button class="btn" data-act="next">${pend === 'next' ? 'Click again to skip ahead' : 'Skip to ' + nextLabel}</button>`;
+  $('#app').innerHTML = `
+    <header class="top">
+      <div class="brand"><b>WPR2 Review</b><span>${esc(R.name)} · ${left} left</span><span id="netchip" class="kn">${esc(netChip())}</span></div>
+      <div class="ctl">
+        <button class="btn" data-act="scores">Edit scores</button>
+        <button class="btn" data-act="fs">Full screen</button>
+        ${nextBtn}
+        <button class="btn warn" data-act="newgame">${pend === 'newgame' ? 'Click again to erase' : 'New game'}</button>
+      </div>
+    </header>
+    <main class="board">${cells}</main>
+    ${scoreboard(true)}`;
+}
+
+/* ============================================================
+   CLUE
+   ============================================================ */
+function openClue(ci, i){
+  const R = ROUNDS[S.round];
+  const isDD = S.dd[S.round].includes(ci + ',' + i);
+  cur = {r:S.round, c:ci, i, val:(i + 1) * 200 * R.mult, dd:isDD, stage:isDD ? 'dd' : 'clue', team:S.picker,
+         wager:null, draft:'', queue:[], revealed:false, resolved:false, touched:false, res:S.teams.map(() => 0)};
+  tm.total = 0;
+  if(!isDD) startTimer(S.timerSecs);
+  render();
+}
+function judgeRow(){
+  const written = S.mode === 'written' && !cur.dd;
+  const log = !cur.dd && !written;
+  const list = cur.dd ? [cur.team] : S.teams.map((_,i) => i);
+  const ord = ['1st','2nd','3rd','4th','5th','6th','7th','8th'];
+  const q = log ? cur.queue : [];
+  const up = q.length ? q[0] : -1;
+  const banner = !log ? '' : (up >= 0
+    ? `<div class="upbanner"><b>${esc(S.teams[up].name)}</b> buzzed first${q.length > 1 ? ' \u00b7 then ' + q.slice(1).map(k => esc(S.teams[k].name)).join(', ') : ''}</div>`
+    : `<div class="upbanner dim">${netOK ? 'Buzzers are open. First buzz shows here. ' : ''}Or log a buzz by hand: press 1\u2013${S.teams.length}</div>`);
+  return banner + `<div class="judge">` + list.map(i => {
+    const t = S.teams[i], r = cur.res[i], pos = q.indexOf(i);
+    const okOn = r === 1 ? 'on-ok' : '', noOn = r === -1 ? 'on-no' : '';
+    const okDis = (!written && (cur.resolved || r !== 0)) ? 'disabled' : '';
+    const noDis = (cur.resolved || r !== 0) ? 'disabled' : '';
+    const nm = log
+      ? `<span class="kn">${i + 1}</span><button class="jt-n" data-act="buzzlog" data-t="${i}" ${(cur.resolved || r !== 0) ? 'disabled' : ''}>${esc(t.name)}</button>`
+      : `<span class="jt-n">${esc(t.name)}</span>`;
+    return `<div class="jt ${i === up ? 'up' : ''}" style="--tc:${tc(i)}">
+      ${pos >= 0 ? `<span class="ord">${ord[pos]}</span>` : ''}${nm}<span class="jt-s ${t.score < 0 ? 'neg' : ''}">${fmt(t.score)}</span>
+      <button class="j ok ${okOn}" data-act="correct" data-t="${i}" ${okDis} aria-label="${esc(t.name)} correct, plus ${cur.val}">\u2713</button>
+      ${written ? '' : `<button class="j no ${noOn}" data-act="wrong" data-t="${i}" ${noDis} aria-label="${esc(t.name)} wrong, minus ${cur.val}">\u2717</button>`}
+    </div>`;
+  }).join('') + `</div>`;
+}
+function buzzLog(i){
+  if(!cur || cur.resolved || cur.dd || cur.stage !== 'clue' || S.mode !== 'buzz' || !S.teams[i] || cur.res[i] !== 0) return;
+  const p = cur.queue.indexOf(i);
+  if(p >= 0) cur.queue.splice(p, 1); else cur.queue.push(i);
+  netSend({t:'queue', queue:cur.queue});
+  render();
+}
+function renderClue(){
+  const ov = $('#overlay');
+  if(!cur){ ov.classList.remove('on'); ov.innerHTML = ''; return; }
+  ov.classList.add('on');
+  const R = ROUNDS[cur.r], cat = R.cats[cur.c], cl = cat.clues[cur.i];
+
+  if(cur.stage === 'dd'){
+    const t = S.teams[cur.team], max = Math.max(t.score, 800 * R.mult);
+    const chips = S.teams.map((tt,i) => `<button class="chip ${i === cur.team ? 'sel' : ''}" style="--tc:${tc(i)}" data-act="ddteam" data-t="${i}">${esc(tt.name)} · ${fmt(tt.score)}</button>`).join('');
+    ov.innerHTML = `
+      <div class="dd">
+        <div class="dd-badge">Daily Double</div>
+        <div class="dd-cat">${esc(cat.name)}</div>
+        <div class="chips" role="group" aria-label="Team that is wagering">${chips}</div>
+        <label class="dd-l" for="wager">${esc(t.name)}: wager from $5 to ${fmt(max)}</label>
+        <input id="wager" class="num" type="number" inputmode="numeric" min="5" max="${max}" step="5" value="${esc(cur.draft)}" placeholder="0">
+        <div class="err" id="dderr" aria-live="polite"></div>
+        <div class="ov-act">
+          <button class="btn" data-act="maxwager">All in (${fmt(max)})</button>
+          <button class="btn pri big" data-act="wagerok">Show clue</button>
+          <button class="btn" data-act="ret">Back to board</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const showJudge = true;
+  const done = cur.revealed || cur.resolved;
+  ov.innerHTML = `
+    <div class="ov-top">
+      <div class="ov-cat"><span>${esc(cat.name)}</span><span class="ov-val">${cur.dd ? 'Wager ' : ''}${fmt(cur.val)}</span></div>
+      <div class="ov-right"><span class="pill">${TYPE[cl.t]}</span>${timerHtml()}</div>
+    </div>
+    ${barHtml()}
+    <div class="ov-body"><p class="clue">${esc(cl.q)}</p></div>
+    <div class="answer ${cur.revealed ? 'show' : ''}">
+      <div class="ans-l">Answer</div>
+      <div class="ans-m ${(cl.t === 'CODE' || cl.t === 'HYP') ? 'code' : ''}">${esc(cl.a)}</div>
+      <div class="ans-w">${esc(cl.w)}</div>
+    </div>
+    ${showJudge ? judgeRow() : ''}
+    <div class="ov-act">
+      ${cur.revealed ? '' : `<button class="btn pri big" data-act="reveal">Reveal answer</button>`}
+      ${done ? `<button class="btn ${cur.revealed ? 'pri big' : ''}" data-act="close">Back to board</button>` : ''}
+      ${(!cur.touched && !cur.revealed) ? `<button class="btn" data-act="ret">Return clue to board</button>` : ''}
+    </div>`;
+  paint();
+}
+function correct(i){
+  if(!cur || cur.resolved) return;
+  const t = S.teams[i];
+  if(S.mode === 'written' && !cur.dd){
+    if(cur.res[i] === 1){ t.score -= cur.val; cur.res[i] = 0; }
+    else { t.score += cur.val; cur.res[i] = 1; }
+    cur.touched = true;
+  } else {
+    if(cur.res[i] !== 0) return;
+    t.score += cur.val; cur.res[i] = 1; cur.resolved = true; cur.revealed = true; cur.touched = true;
+    S.picker = i; stopTimer();
+  }
+  render();
+}
+function wrong(i){
+  if(!cur || cur.resolved || cur.res[i] !== 0) return;
+  S.teams[i].score -= cur.val; cur.res[i] = -1; cur.touched = true; cur.queue = cur.queue.filter(k => k !== i);
+  const open = cur.dd ? 0 : cur.res.filter(x => x === 0).length;
+  if(open === 0){ cur.resolved = true; cur.revealed = true; stopTimer(); }
+  else startTimer(S.timerSecs);
+  render();
+}
+function closeClue(){
+  if(!cur) return;
+  stopTimer();
+  S.used[cur.r][cur.c][cur.i] = true;
+  if(S.mode === 'written' && !cur.dd) S.picker = (S.picker + 1) % S.teams.length;
+  cur = null; tm.total = 0;
+  render();
+}
+function returnClue(){
+  if(!cur) return;
+  if(cur.touched || cur.revealed) return closeClue();
+  stopTimer(); cur = null; tm.total = 0; render();
+}
+function wagerOk(){
+  const el = $('#wager'); if(!el) return;
+  const t = S.teams[cur.team], max = Math.max(t.score, 800 * ROUNDS[cur.r].mult);
+  const w = Math.floor(Number(el.value));
+  if(!(w >= 5 && w <= max)){ $('#dderr').textContent = 'Enter a whole-number wager from $5 to ' + fmt(max) + '.'; return; }
+  cur.wager = w; cur.val = w; cur.stage = 'clue'; S.picker = cur.team;
+  startTimer(S.timerSecs);
+  render();
+}
+
+/* ============================================================
+   FINAL
+   ============================================================ */
+function startFinal(){
+  S.phase = 'final';
+  S.final = {step:0, wagers:S.teams.map(() => 0), res:S.teams.map(() => 0)};
+  cur = null; tm.total = 0; render();
+}
+function finalLock(){
+  S.final.wagers = S.teams.map((t,i) => {
+    const el = $('#fw' + i); const max = Math.max(0, t.score);
+    let w = el ? Math.floor(Number(el.value)) : 0; if(!(w >= 0)) w = 0; return Math.min(w, max);
+  });
+  S.final.step = 1; startTimer(Math.max(60, S.timerSecs)); render();
+}
+function finalJudge(i, v){
+  const f = S.final, w = f.wagers[i], t = S.teams[i];
+  if(f.res[i] === v){ t.score -= v * w; f.res[i] = 0; }
+  else { t.score += (v - f.res[i]) * w; f.res[i] = v; }
+  render();
+}
+function renderFinal(){
+  const f = S.final;
+  let body = '';
+  if(f.step === 0){
+    body = `
+      <div class="f-k">Final round</div>
+      <h1 class="f-cat">${esc(FINAL.cat)}</h1>
+      <p class="s-sub">Teams decide how much to risk, up to their score. A team at or below $0 cannot wager.</p>
+      <div class="wagers">` + S.teams.map((t,i) => {
+        const max = Math.max(0, t.score);
+        return `<div class="wg" style="--tc:${tc(i)}"><b>${esc(t.name)}</b><small>Score ${fmt(t.score)} · max ${fmt(max)}</small>
+          <input id="fw${i}" class="num" type="number" min="0" max="${max}" step="1" value="${f.wagers[i] || ''}" placeholder="0" ${max === 0 ? 'disabled' : ''} aria-label="Wager for ${esc(t.name)}"></div>`;
+      }).join('') + `</div>
+      <button class="btn pri big" data-act="finallock">Lock wagers and show clue</button>`;
+  } else {
+    const showAns = f.step >= 2;
+    body = `
+      <div class="ov-top" style="width:100%"><div class="ov-cat"><span>Final · ${esc(FINAL.cat)}</span></div><div class="ov-right"><span class="pill">${TYPE.TEST} and write the code</span>${timerHtml()}</div></div>
+      ${barHtml()}
+      <div class="ov-body" style="width:100%"><p class="clue">${esc(FINAL.q)}</p></div>
+      <div class="answer ${showAns ? 'show' : ''}">
+        <div class="ans-l">Answer</div>
+        <div class="ans-m code">${esc(FINAL.a)}</div>
+        <div class="ans-w">${esc(FINAL.w)}</div>
+      </div>
+      ${showAns ? `<div class="judge">` + S.teams.map((t,i) => `
+        <div class="jt" style="--tc:${tc(i)}"><span class="jt-n">${esc(t.name)}</span><span class="jt-s">Wager ${fmt(f.wagers[i])}</span>
+          <button class="j ok ${f.res[i] === 1 ? 'on-ok' : ''}" data-act="fjudge" data-t="${i}" data-v="1" aria-label="${esc(t.name)} correct">✓</button>
+          <button class="j no ${f.res[i] === -1 ? 'on-no' : ''}" data-act="fjudge" data-t="${i}" data-v="-1" aria-label="${esc(t.name)} wrong">✗</button>
+          <span class="jt-s ${t.score < 0 ? 'neg' : ''}">${fmt(t.score)}</span></div>`).join('') + `</div>` : ''}
+      <div class="ov-act">
+        ${f.step === 1 ? `<button class="btn pri big" data-act="freveal">Reveal answer</button>` : `<button class="btn pri big" data-act="fdone">Show final standings</button>`}
+      </div>`;
+  }
+  $('#app').innerHTML = `
+    <header class="top"><div class="brand"><b>WPR2 Review</b><span>Final round</span></div>
+      <div class="ctl"><button class="btn" data-act="scores">Edit scores</button><button class="btn" data-act="fs">Full screen</button></div></header>
+    <main class="final">${body}</main>
+    ${scoreboard(false)}`;
+  paint();
+}
+function renderDone(){
+  const order = S.teams.map((t,i) => ({...t, i})).sort((a,b) => b.score - a.score);
+  let rank = 0, prev = null;
+  const rows = order.map((t,k) => {
+    if(t.score !== prev){ rank = k + 1; prev = t.score; }
+    return `<div class="rk ${rank === 1 ? 'first' : ''}" style="--tc:${tc(t.i)}"><span class="rk-p">${rank}</span><span class="rk-n">${esc(t.name)}</span><span class="rk-s ${t.score < 0 ? 'neg' : ''}">${fmt(t.score)}</span></div>`;
+  }).join('');
+  $('#app').innerHTML = `
+    <header class="top"><div class="brand"><b>WPR2 Review</b><span>Final standings</span></div>
+      <div class="ctl"><button class="btn" data-act="scores">Edit scores</button><button class="btn" data-act="fs">Full screen</button><button class="btn warn" data-act="newgame">${pend === 'newgame' ? 'Click again to erase' : 'New game'}</button></div></header>
+    <main class="final"><div class="f-k">Final standings</div><h1 class="f-cat">Well played</h1><div class="stand">${rows}</div></main>`;
+}
+
+/* ============================================================
+   MODAL: edit scores
+   ============================================================ */
+function openScores(){
+  const m = $('#modal');
+  m.innerHTML = `<div class="card"><h2>Edit scores</h2>` +
+    S.teams.map((t,i) => `<div class="er" style="--tc:${tc(i)}"><label for="es${i}">${esc(t.name)}</label><input id="es${i}" type="number" step="1" value="${t.score}"></div>`).join('') +
+    `<div class="ov-act"><button class="btn pri" data-act="savescores">Save</button><button class="btn" data-act="closemodal">Cancel</button></div></div>`;
+  m.classList.add('on');
+  const f = $('#es0'); if(f) f.focus();
+}
+function closeModal(){ const m = $('#modal'); m.classList.remove('on'); m.innerHTML = ''; }
+function saveScores(){
+  S.teams.forEach((t,i) => { const v = Math.round(Number($('#es' + i).value)); if(Number.isFinite(v)) t.score = v; });
+  closeModal(); render();
+}
+
+/* ============================================================
+   WIRING
+   ============================================================ */
+function twoStep(key){
+  if(pend === key){ pend = null; clearTimeout(pendT); return true; }
+  pend = key; clearTimeout(pendT);
+  pendT = setTimeout(() => { pend = null; render(); }, 3000);
+  render(); return false;
+}
+function render(){
+  if(!S){ return; }
+  if(S.phase === 'board') renderBoard();
+  else if(S.phase === 'final') renderFinal();
+  else renderDone();
+  renderClue();
+  save();
+  netSync();
+}
+function act(a, el){
+  const t = el.dataset.t !== undefined ? +el.dataset.t : null;
+  switch(a){
+    case 'tplus': collectSetup(); if(setup.n < 8){ setup.n++; renderSetup(); } break;
+    case 'tminus': collectSetup(); if(setup.n > 2){ setup.n--; renderSetup(); } break;
+    case 'start': startGame(); break;
+    case 'resume': S = loadSaved(); cur = null; tm.total = 0; render(); break;
+    case 'pick': openClue(+el.dataset.c, +el.dataset.i); break;
+    case 'setpicker': S.picker = t; render(); break;
+    case 'ddteam': cur.team = t; { const w = $('#wager'); if(w) cur.draft = w.value; } renderClue(); break;
+    case 'maxwager': { const tm_ = S.teams[cur.team]; cur.draft = String(Math.max(tm_.score, 800 * ROUNDS[cur.r].mult)); renderClue(); } break;
+    case 'wagerok': wagerOk(); break;
+    case 'correct': correct(t); break;
+    case 'wrong': wrong(t); break;
+    case 'buzzlog': buzzLog(t); break;
+    case 'reveal': if(cur){ cur.revealed = true; stopTimer(); render(); } break;
+    case 'close': closeClue(); break;
+    case 'ret': returnClue(); break;
+    case 'timer': toggleTimer(); break;
+    case 'scores': openScores(); break;
+    case 'savescores': saveScores(); break;
+    case 'closemodal': closeModal(); break;
+    case 'fs': try{ const r = document.documentElement.requestFullscreen; if(r) r.call(document.documentElement).catch(() => {}); }catch(e){} break;
+    case 'next': if(ROUNDS && (S.used[S.round].flat().every(Boolean) || twoStep('next'))){
+        if(S.round === 0){
+          S.round = 1; let lo = 0; S.teams.forEach((x,i) => { if(x.score < S.teams[lo].score) lo = i; }); S.picker = lo; render();
+        } else startFinal();
+      } break;
+    case 'newgame': if(twoStep('newgame')){ clearSaved(); S = null; cur = null; stopTimer(); tm.total = 0; closeModal(); $('#overlay').classList.remove('on'); setup.names = []; renderSetup(); } break;
+    case 'finallock': finalLock(); break;
+    case 'freveal': S.final.step = 2; stopTimer(); render(); break;
+    case 'fjudge': finalJudge(t, +el.dataset.v); break;
+    case 'fdone': S.phase = 'done'; render(); break;
+  }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if(!b || b.disabled) return;
+  act(b.dataset.act, b);
+});
+document.addEventListener('keydown', e => {
+  if($('#modal').classList.contains('on')){ if(e.key === 'Escape') closeModal(); return; }
+  if(e.key === 'Escape' && cur){ e.preventDefault(); returnClue(); return; }
+  if(e.target.closest('button,input,select,textarea')) {
+    if(e.key === 'Enter' && e.target.id === 'wager'){ e.preventDefault(); wagerOk(); }
+    return;
+  }
+  if(/^[1-8]$/.test(e.key) && cur && cur.stage === 'clue'){ e.preventDefault(); buzzLog(+e.key - 1); return; }
+  if((e.key === ' ' || e.key === 'Enter')){
+    if(cur && cur.stage === 'clue' && !cur.revealed){ e.preventDefault(); cur.revealed = true; stopTimer(); render(); }
+    else if(S && S.phase === 'final' && S.final.step === 1){ e.preventDefault(); S.final.step = 2; stopTimer(); render(); }
+  }
+});
+
+/* ============================================================
+   LIVE BUZZERS (only active when served by server.js)
+   ============================================================ */
+let ws = null, netOK = false, netFails = 0, netState = null;
+function netSend(o){ try{ if(ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }catch(e){} }
+function buzzersOpen(){
+  return !!(S && S.phase === 'board' && cur && cur.stage === 'clue' && !cur.resolved && !cur.revealed && !cur.dd && S.mode === 'buzz');
+}
+function netSync(){
+  netSend({t:'sync', teams: S ? S.teams.map(x => ({name:x.name, score:x.score})) : [],
+           open: buzzersOpen(), locked: cur ? cur.res.map((r,i) => r !== 0 ? i : -1).filter(i => i >= 0) : []});
+}
+function netConnect(){
+  if(!/^https?:$/.test(location.protocol)) return;
+  try{
+    const w = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws = w; let opened = false;
+    w.onopen = () => { opened = true; netFails = 0; netSend({t:'host', pin:new URLSearchParams(location.search).get('pin') || ''}); };
+    w.onmessage = ev => {
+      let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+      if(m.t === 'hostok'){ netOK = !!m.ok; netSync(); if(S) render(); else renderSetup(); }
+      else if(m.t === 'state'){
+        netState = m;
+        if(netOK && cur && buzzersOpen()){
+          const q = m.queue.filter(i => i < S.teams.length && cur.res[i] === 0);
+          if(q.join() !== cur.queue.join()){ cur.queue = q; renderClue(); }
+        }
+        const el = $('#netchip'); if(el) el.textContent = netChip();
+      }
+    };
+    w.onclose = () => { netOK = false; if(!opened && ++netFails >= 3) return; setTimeout(netConnect, 2000); };
+  }catch(e){}
+}
+function netChip(){
+  if(!netOK) return '';
+  const n = netState ? netState.teams.filter(t => t.n > 0).length : 0, tot = netState ? netState.teams.length : 0;
+  return 'Buzzers: ' + n + '/' + tot + ' teams online  ·  teams open ' + location.host + '/buzz';
+}
+
+/* boot, with state kept across republishes */
+function boot(data){
+  if(data && data.phase){ S = data; render(); }
+  else { S = null; renderSetup(); }
+}
+try{ window.claude?.hot?.snapshot(() => (S ? JSON.parse(JSON.stringify(S)) : {})); }catch(e){}
+if(window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(null);
+netConnect();
+</script>
+</body>
+</html>
